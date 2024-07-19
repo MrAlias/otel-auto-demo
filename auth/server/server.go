@@ -49,6 +49,7 @@ func newServer(ctx context.Context, addr string) (*server, error) {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/{user}", srv.check)
+	mux.HandleFunc("/healthcheck", srv.healthcheck)
 
 	srv.Server = &http.Server{
 		Addr:        addr,
@@ -77,4 +78,8 @@ func (s *server) check(w http.ResponseWriter, req *http.Request) {
 	default:
 		fmt.Fprint(w, "Authorized")
 	}
+}
+
+func (s *server) healthcheck(w http.ResponseWriter, _ *http.Request) {
+	fmt.Fprint(w, "healthy")
 }
