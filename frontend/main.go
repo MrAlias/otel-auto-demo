@@ -15,8 +15,7 @@ import (
 
 var (
 	listenAddr = flag.String("addr", ":8080", "server listen address")
-	quotaAddr  = flag.String("quota", "http://localhost:8082", "quota service address")
-	userAddr   = flag.String("user", "http://localhost:8083", "user service address")
+	userAddr   = flag.String("user", "http://localhost:8082", "user service address")
 )
 
 func main() {
@@ -32,7 +31,7 @@ func main() {
 	}
 	defer shutdown()
 
-	srv := newServer(ctx, *listenAddr, *userAddr, *quotaAddr)
+	srv := newServer(ctx, *listenAddr, *userAddr)
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
 

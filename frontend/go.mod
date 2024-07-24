@@ -3,7 +3,6 @@ module github.com/MrAlias/otel-auto-demo/frontend
 go 1.22.4
 
 require (
-	github.com/MrAlias/otel-auto-demo/quota v0.0.0-00010101000000-000000000000
 	github.com/MrAlias/otel-auto-demo/user v0.0.0-00010101000000-000000000000
 	go.opentelemetry.io/contrib/exporters/autoexport v0.53.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.53.0
@@ -51,8 +50,4 @@ require (
 	google.golang.org/protobuf v1.34.2 // indirect
 )
 
-replace github.com/MrAlias/otel-auto-demo/auth => ../auth/
-
 replace github.com/MrAlias/otel-auto-demo/user => ../user/
-
-replace github.com/MrAlias/otel-auto-demo/quota => ../quota/

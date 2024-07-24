@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/MrAlias/otel-auto-demo/quota"
 	"github.com/MrAlias/otel-auto-demo/user"
 )
 
@@ -23,27 +22,16 @@ const scope = "github.com/MrAlias/otel-auto-demo/frontend"
 
 type serviceKeyType int
 
-const (
-	userKey serviceKeyType = iota
-	quotaKey
-)
+const userKey serviceKeyType = 0
 
-func newServer(ctx context.Context, listenAddr, userAddr, quotaAddr string) *http.Server {
-	uClient := user.NewClient(otelhttp.DefaultClient, userAddr)
-	if err := uClient.HealthCheck(ctx); err != nil {
+func newServer(ctx context.Context, listenAddr, userAddr string) *http.Server {
+	client := user.NewClient(otelhttp.DefaultClient, userAddr)
+	if err := client.HealthCheck(ctx); err != nil {
 		log.Print("Cannot reach User service: ", err)
 	} else {
 		log.Print("Connected to User service at ", userAddr)
 	}
-	ctx = context.WithValue(ctx, userKey, uClient)
-
-	qClient := quota.NewClient(otelhttp.DefaultClient, quotaAddr)
-	if err := qClient.HealthCheck(ctx); err != nil {
-		log.Print("Cannot reach Quota service: ", err)
-	} else {
-		log.Print("Connected to Quota service at ", quotaAddr)
-	}
-	ctx = context.WithValue(ctx, quotaKey, qClient)
+	ctx = context.WithValue(ctx, userKey, client)
 
 	mux := http.NewServeMux()
 
@@ -69,7 +57,7 @@ func rolldice(w http.ResponseWriter, r *http.Request) {
 
 	player := r.PathValue("player")
 
-	uClient, ok := ctx.Value(userKey).(*user.Client)
+	client, ok := ctx.Value(userKey).(*user.Client)
 	if !ok {
 		http.Error(w, "Internal Error", http.StatusInternalServerError)
 
@@ -79,25 +67,8 @@ func rolldice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	qClient, ok := ctx.Value(quotaKey).(*quota.Client)
-	if !ok {
-		http.Error(w, "Internal Error", http.StatusInternalServerError)
-
-		err := errors.New("no Quota client")
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return
-	}
-
-	id, err := uClient.UserID(ctx, player)
-	if err != nil {
-		http.Error(w, "Internal Error", http.StatusInternalServerError)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return
-	}
-	if err := qClient.UseQuota(ctx, id); err != nil {
-		if errors.Is(err, quota.ErrInsufficient) {
+	if err := client.UseQuota(ctx, player); err != nil {
+		if errors.Is(err, user.ErrInsufficient) {
 			http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 		} else {
 			span.RecordError(err)
