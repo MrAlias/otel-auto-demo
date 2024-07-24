@@ -2,15 +2,13 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"time"
-
-	"github.com/MrAlias/otel-auto-demo/user"
 )
 
 const defaultQuota = 5
@@ -20,6 +18,12 @@ var (
 	usersAddr  = flag.String("users", "http://localhost:8083", "users server address")
 )
 
+var users = []string{
+	"Alice", "Bob", "Carol", "Dan", "Erin", "Faythe", "Grace", "Heidi", "Ivan",
+	"Judy", "Mallory", "Niaj", "Olivia", "Peggy", "Rupert", "Sybil", "Trent",
+	"Victor", "Walter",
+}
+
 func main() {
 	flag.Parse()
 
@@ -27,27 +31,28 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	uClient := user.NewClient(http.DefaultClient, *usersAddr)
-
 	db, err := openDB()
 	if err != nil {
-		log.Print("Quota database error:", err)
+		log.Fatal("User database error: ", err)
 	}
-	err = initDB(ctx, db, uClient, defaultQuota)
-	err = errors.Join(err, db.Close())
-	if err != nil {
-		log.Print("Quota database initialization error:", err)
+	if err = initDB(ctx, db); err != nil {
+		log.Print("User database initialization error: ", err)
 	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Print("User database close error: ", err)
+		}
+	}()
 
-	sErr := syncUsers(ctx, uClient, defaultQuota)
-	rErr := refreshQuotas(ctx, 3*time.Second, 3, defaultQuota*2)
+	sErr := syncUsers(ctx, db)
+	rErr := refreshQuotas(ctx, db, 3*time.Second, 3, defaultQuota*2)
 
-	log.Printf("Starting Quota server at %s ...", *listenAddr)
+	log.Printf("Starting User server at %s ...", *listenAddr)
 	srv := newServer(ctx, *listenAddr)
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
 
-	log.Println("Quota server started.")
+	log.Println("User server started.")
 
 	select {
 	case err = <-errCh:
@@ -61,37 +66,27 @@ func main() {
 
 	}
 	if err != nil {
-		log.Print("Quota server error:", err)
+		log.Print("User server error:", err)
 	}
-	log.Print("Quota server stopped.")
+	log.Print("User server stopped.")
 }
 
-func syncUsers(ctx context.Context, uClient *user.Client, quota int) <-chan error {
+func syncUsers(ctx context.Context, db *sql.DB) <-chan error {
 	errCh := make(chan error, 1)
 	go func() {
 		defer close(errCh)
 
-		db, err := openDB()
-		if err != nil {
-			errCh <- err
-			return
-		}
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
+			for _, u := range users {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
 
-			ids, err := uClient.AllIDs(ctx)
-			if err != nil {
-				continue
-			}
-
-			for _, id := range ids {
-				_, err := getQuota(ctx, db, id)
+				_, err := getUser(ctx, db, u)
 				if errors.Is(err, errUser) {
-					_ = setQuota(ctx, db, id, quota)
+					_ = addUser(ctx, db, u, defaultQuota)
 				}
 			}
 		}
@@ -99,7 +94,7 @@ func syncUsers(ctx context.Context, uClient *user.Client, quota int) <-chan erro
 	return errCh
 }
 
-func refreshQuotas(ctx context.Context, d time.Duration, incr, ceil int) <-chan error {
+func refreshQuotas(ctx context.Context, db *sql.DB, d time.Duration, incr, ceil int) <-chan error {
 	errCh := make(chan error, 1)
 	go func() {
 		defer close(errCh)
@@ -112,12 +107,7 @@ func refreshQuotas(ctx context.Context, d time.Duration, incr, ceil int) <-chan 
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				db, err := openDB()
-				if err != nil {
-					errCh <- err
-					return
-				}
-				err = resetQuotas(ctx, db, incr, ceil)
+				err := addQuota(ctx, db, incr, ceil)
 				if err != nil {
 					log.Print("Failed to reset quotas: ", err)
 				}
