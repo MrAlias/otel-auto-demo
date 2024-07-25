@@ -1,0 +1,57 @@
+networks:
+  default:
+    name: dice
+    driver: bridge
+
+services:
+  frontend:
+    depends_on:
+      - jaeger
+      - user
+    build:
+      context: .
+      dockerfile: ./frontend/Dockerfile
+    command: "-user=http://user:8082"
+    pid: "host"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_SERVICE_NAME=frontend
+      - OTEL_PROPAGATORS=tracecontext,baggage
+    ports:
+      - "8080:8080"
+    volumes:
+      - /proc:/host/proc
+  user:
+    build:
+      context: ./user/
+      dockerfile: ./Dockerfile
+    pid: "host"
+    ports:
+      - "8082:8082"
+    volumes:
+      - /proc:/host/proc
+  go-auto:
+    depends_on:
+      - user
+    image: ghcr.io/open-telemetry/opentelemetry-go-instrumentation/autoinstrumentation-go:v0.14.0-alpha
+    privileged: true
+    pid: "host"
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+      - OTEL_GO_AUTO_TARGET_EXE=/usr/local/bin/user
+      - OTEL_SERVICE_NAME=user
+      - OTEL_PROPAGATORS=tracecontext,baggage
+    volumes:
+      - /proc:/host/proc
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    deploy:
+      resources:
+        limits:
+          memory: 300M
+    restart: unless-stopped
