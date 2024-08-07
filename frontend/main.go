@@ -8,7 +8,10 @@ import (
 	"os/signal"
 )
 
-var listenAddr = flag.String("addr", ":8080", "server listen address")
+var (
+	listenAddr = flag.String("addr", ":8080", "server listen address")
+	userAddr   = flag.String("user", "http://localhost:8082", "user service address")
+)
 
 func main() {
 	flag.Parse()
@@ -17,7 +20,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	srv := newServer(ctx, *listenAddr)
+	srv := newServer(ctx, *listenAddr, *userAddr)
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
 
