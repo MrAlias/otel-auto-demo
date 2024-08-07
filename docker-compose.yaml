@@ -30,6 +30,12 @@ services:
       - "8082:8082"
     volumes:
       - /proc:/host/proc
+    deploy:
+      resources:
+        limits:
+          cpus: 0.5
+          memory: 500M
+    restart: unless-stopped
   go-auto:
     depends_on:
       - user
@@ -41,17 +47,13 @@ services:
       - OTEL_GO_AUTO_TARGET_EXE=/usr/local/bin/user
       - OTEL_SERVICE_NAME=user
       - OTEL_PROPAGATORS=tracecontext,baggage
+      - OTEL_GO_AUTO_GLOBAL=true
     volumes:
       - /proc:/host/proc
   jaeger:
     image: jaegertracing/all-in-one:latest
     ports:
-      - "16686:16686"
-      - "14268:14268"
+      - "16686:16686"   # Web HTTP
     environment:
       - COLLECTOR_OTLP_ENABLED=true
-    deploy:
-      resources:
-        limits:
-          memory: 300M
     restart: unless-stopped
