@@ -107,10 +107,7 @@ func refreshQuotas(ctx context.Context, db *sql.DB, d time.Duration, incr, ceil 
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				err := addQuota(ctx, db, incr, ceil)
-				if err != nil {
-					log.Print("Failed to reset quotas: ", err)
-				}
+				_ = addQuota(ctx, db, incr, ceil)
 			}
 		}
 	}()
