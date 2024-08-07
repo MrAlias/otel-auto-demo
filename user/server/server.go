@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func newServer(ctx context.Context, addr string) *http.Server {
@@ -30,11 +33,17 @@ func handleAlloc(w http.ResponseWriter, req *http.Request) {
 	}
 	defer func() { _ = db.Close() }()
 
-	u, err := useQuota(req.Context(), db, name)
+	ctx := req.Context()
+	tracer := otel.Tracer("user")
+	ctx, span := tracer.Start(ctx, "userQuota")
+	u, err := useQuota(ctx, db, name)
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		span.End()
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	span.End()
 
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(u); err != nil {
