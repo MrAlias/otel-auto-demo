@@ -6,6 +6,11 @@ import (
 	"log"
 	"os"
 	"os/signal"
+
+	"go.opentelemetry.io/contrib/exporters/autoexport"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/trace"
 )
 
 var (
@@ -20,13 +25,18 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	shutdown, err := installSDK(ctx)
+	if err != nil {
+		log.Fatal("Failed to setup OTel:", err)
+	}
+	defer shutdown()
+
 	srv := newServer(ctx, *listenAddr, *userAddr)
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
 
 	log.Printf("Frontend server listening at %s ...", *listenAddr)
 
-	var err error
 	select {
 	case err = <-errCh:
 	case <-ctx.Done():
@@ -36,4 +46,27 @@ func main() {
 		log.Print("Frontend server error:", err)
 	}
 	log.Print("Frontend server stopped.")
+}
+
+func installSDK(ctx context.Context) (func(), error) {
+	// Propagator.
+	p := propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)
+	otel.SetTextMapPropagator(p)
+
+	// TracerProvider.
+	exp, err := autoexport.NewSpanExporter(ctx)
+	if err != nil {
+		return func() {}, err
+	}
+	tp := trace.NewTracerProvider(trace.WithSyncer(exp))
+	otel.SetTracerProvider(tp)
+
+	return func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			log.Print("Faild to shutdown TracerProvider:", err)
+		}
+	}, nil
 }
