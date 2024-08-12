@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"flag"
 	"log"
 	"os"
@@ -44,7 +43,6 @@ func main() {
 		}
 	}()
 
-	sErr := syncUsers(ctx, db)
 	rErr := refreshQuotas(ctx, db, 3*time.Second, 3, defaultQuota*2)
 
 	log.Printf("Starting User server at %s ...", *listenAddr)
@@ -59,8 +57,6 @@ func main() {
 		stop()
 	case err = <-rErr:
 		stop()
-	case err = <-sErr:
-		stop()
 	case <-ctx.Done():
 		err = srv.Shutdown(context.Background())
 
@@ -69,29 +65,6 @@ func main() {
 		log.Print("User server error:", err)
 	}
 	log.Print("User server stopped.")
-}
-
-func syncUsers(ctx context.Context, db *sql.DB) <-chan error {
-	errCh := make(chan error, 1)
-	go func() {
-		defer close(errCh)
-
-		for {
-			for _, u := range users {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-				}
-
-				_, err := getUser(ctx, db, u)
-				if errors.Is(err, errUser) {
-					_ = addUser(ctx, db, u, defaultQuota)
-				}
-			}
-		}
-	}()
-	return errCh
 }
 
 func refreshQuotas(ctx context.Context, db *sql.DB, d time.Duration, incr, ceil int) <-chan error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"math/rand"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -87,8 +88,16 @@ func useQuota(ctx context.Context, db *sql.DB, name string) (internal.User, erro
 	if errors.Is(err, sql.ErrNoRows) {
 		err = errUser
 	}
-	if err == nil && u.Quota == 0 {
-		err = errInsufficient
+	if err == nil {
+		if u.Quota == 0 {
+			err = errInsufficient
+		} else if rand.Intn(4) < 1 {
+			// Simulate the "database is locked" issue
+			// (https://github.com/mattn/go-sqlite3/issues/274). Actually
+			// triggering this issue causes run away CPU usage by the user
+			// service.
+			err = errors.New("database table is locked: users")
+		}
 	}
 	return u, err
 }
